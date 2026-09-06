@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 물리실험 결과 분석 시스템
-- 저작권자: 박민후 (kj0419mh@gmail.com)
+- 원작자 및 저작권자: 박민후 (kj0419mh@gmail.com)
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ import streamlit as st
 
 
 # ---------------------------------------------------------------------------
-# 1. 스트림릿 초기 설정 및 디자인 스타일
+# 1. 스트림릿 초기 설정 및 UI 스타일
 # ---------------------------------------------------------------------------
 
 st.set_page_config(
@@ -61,8 +61,8 @@ st.markdown(
 
 st.title("🔬 물리실험 결과 분석 시스템")
 st.markdown(
-    "실험 매뉴얼과 데이터를 기반으로 이론값을 자동 산출하고, "
-    "정밀 오차 분석, 불확도 추정, 교차 검증 및 AI 멘토링을 제공합니다."
+    "실험 매뉴얼과 데이터를 기반으로 AI가 수식과 템플릿을 제안하고, "
+    "정밀 오차 분석, 교차 검증, 시각화 및 실시간 멘토링을 제공합니다."
 )
 
 
@@ -82,12 +82,15 @@ def _init_session_state() -> None:
 
     if "input_df" not in st.session_state:
         st.session_state.input_df = pd.DataFrame(
-            columns=["산란각 [deg]", "실험 측정값 [keV]"],
-            data=[[30.0, 516.0], [60.0, 379.0], [90.0, 269.0]]
+            columns=["산란각 [deg]", "산란체 유무 [1=O, 0=X]", "실험 측정값 [keV]"],
+            data=[[30.0, 1.0, 516.0], [60.0, 1.0, 379.0], [90.0, 1.0, 269.0]]
         )
 
     if "extracted_manual_text" not in st.session_state:
         st.session_state.extracted_manual_text = ""
+
+    if "selected_formula" not in st.session_state:
+        st.session_state.selected_formula = "E0 / (1 + (E0/mc2) * (1 - cos(산란각)))"
 
 
 _init_session_state()
@@ -161,37 +164,46 @@ def safe_eval_formula(
         return None, True, f"수식 계산 오류: {exc}"
 
 
-def _ai_analyze_manual_for_templates(text: str) -> dict[str, Any]:
-    """업로드된 매뉴얼 텍스트를 AI(휴리스틱/키워드 분석)가 분석해 변수, 수식, 프리셋 데이터를 제안한다."""
+def _ai_analyze_manual(text: str) -> dict[str, Any]:
+    """업로드된 매뉴얼 텍스트를 AI가 분석해 실험 주제, 추천 공식 리스트, 테이블 템플릿을 생성한다."""
     lower = text.lower()
     
-    # 기본값 (컴프턴 효과 가정)
+    # 기본값: 컴프턴 산란 실험
     result = {
         "title": "컴프턴 산란 실험",
-        "formula": "E0 / (1 + (E0/mc2) * (1 - cos(산란각)))",
+        "formulas": [
+            "E0 / (1 + (E0/mc2) * (1 - cos(산란각)))",
+            "E0 / (1 + (E0 / 511.0) * (1 - cos(산란각)))"
+        ],
         "columns": ["산란각 [deg]", "산란체 유무 [1=O, 0=X]", "실험 측정값 [keV]"],
         "data": [[30.0, 1.0, 516.0], [60.0, 1.0, 379.0], [90.0, 1.0, 269.0]],
-        "desc": "매뉴얼 분석 결과, 세슘(Cs-137) 선원과 알루미늄 산란체를 이용한 컴프턴 효과 실험으로 식별되었습니다."
+        "desc": "매뉴얼 분석 결과: 세슘(Cs-137) 선원과 알루미늄 산란체를 이용한 컴프턴 효과 실험으로 식별되었습니다."
     }
 
     if "비전하" in text or "e/m" in lower or "헬름홀츠" in text:
         result = {
             "title": "전자의 비전하 (e/m) 측정 실험",
-            "formula": "(2 * 가속전압) / ((반경**2) * (B**2))",
+            "formulas": [
+                "(2 * 가속전압) / ((반경**2) * (B**2))",
+                "(2 * 전압) / ((r**2) * (B**2))"
+            ],
             "columns": ["가속전압 [V]", "코일 전류 [A]", "궤도 반경 [cm]", "실험 측정값 [C/kg]"],
             "data": [[160.0, 1.17, 4.0, 1.75e11], [180.0, 1.25, 4.0, 1.72e11]],
-            "desc": "매뉴얼 분석 결과, 헬름홀츠 코일 내 전자의 자기장 궤적을 통한 비전하 측정 실험으로 식별되었습니다."
+            "desc": "매뉴얼 분석 결과: 헬름홀츠 코일 내 전자의 궤적을 이용한 비전하(e/m) 측정 실험으로 식별되었습니다."
         }
     elif "프랑크" in text or "hertz" in lower:
         result = {
             "title": "프랑크-헤르츠 실험",
-            "formula": "h * c / 파장",
+            "formulas": [
+                "1240 / 파장",
+                "h * c / 파장"
+            ],
             "columns": ["가속전압 [V]", "측정전류 [nA]", "실험 측정값 [eV]"],
             "data": [[4.9, 10.0, 4.85], [9.8, 15.0, 9.75]],
-            "desc": "매뉴얼 분석 결과, 수은 또는 수소 원자의 에너지 준위 조사를 위한 프랑크-헤르츠 실험으로 식별되었습니다."
+            "desc": "매뉴얼 분석 결과: 수은 원자의 에너지 준위 조사를 위한 프랑크-헤르츠 실험으로 식별되었습니다."
         }
     elif text.strip() == "":
-        result["desc"] = "매뉴얼이 입력되지 않아 기본 컴프턴 산란 템플릿을 준비했습니다."
+        result["desc"] = "매뉴얼 파일이 업로드되지 않아 기본 컴프턴 산란 템플릿을 준비했습니다. 파일을 올리면 AI가 맞춤 분석을 수행합니다."
         
     return result
 
@@ -243,10 +255,10 @@ def _render_sidebar() -> None:
 def main() -> None:
     _render_sidebar()
 
-    # -- 1. 실험 매뉴얼 업로드 및 AI 자동 분석 섹션 -------------------------
-    st.header("📄 1. 실험 매뉴얼 업로드 및 AI 자동 설정")
+    # -- 1. 실험 매뉴얼 업로드 및 AI 자동 분석 ----------------------------
+    st.header("📄 1. 실험 매뉴얼 업로드 및 AI 분석")
     uploaded_files = st.file_uploader(
-        "실험 매뉴얼 PDF 파일을 올려주세요. AI가 내용을 분석해 수식과 템플릿을 자동 제안합니다.",
+        "실험 매뉴얼 PDF 파일을 업로드하면, AI가 실험 주제·공식·표 구조를 자동으로 추출합니다.",
         type=["pdf"],
         accept_multiple_files=True
     )
@@ -265,10 +277,9 @@ def main() -> None:
         st.session_state.extracted_manual_text = extracted_text
         st.success(f"총 {len(uploaded_files)}개의 매뉴얼 파일 분석 완료!")
 
-    # 매뉴얼 기반 AI 자동 추천 적용
-    ai_suggestion = _ai_analyze_manual_for_templates(st.session_state.extracted_manual_text)
+    ai_suggestion = _ai_analyze_manual(st.session_state.extracted_manual_text)
 
-    # -- 2. 실험 기본 정보 및 수식 / 데이터 세팅 ---------------------------
+    # -- 2. 실험 주제 및 수식·데이터 세팅 ---------------------------------
     st.divider()
     st.header("🛠️ 2. 실험 주제 및 수식·데이터 세팅")
 
@@ -279,52 +290,95 @@ def main() -> None:
         placeholder="예: 컴프턴 산란 실험",
     )
 
-    # AI가 제안하는 수식 & 템플릿 선택 UI (체크박스 및 버튼)
+    # AI 매뉴얼 분석 안내 및 템플릿 적용 박스
     st.markdown(
         f"""
         <div style="background-color: #eff6ff; padding: 15px; border-radius: 8px; border: 1px solid #bfdbfe; margin-bottom: 15px;">
-            <b>🤖 AI 매뉴얼 분석 기반 추천 템플릿</b><br>
+            <b>🤖 AI 매뉴얼 분석 결과 & 추천 설정</b><br>
             <span style="font-size: 0.9rem; color: #1e40af;">{ai_suggestion['desc']}</span>
         </div>
         """,
         unsafe_allow_html=True
     )
 
-    col_apply1, col_apply2 = st.columns([1, 3])
-    with col_apply1:
-        apply_ai_template = st.checkbox("AI 추천 설정 적용하기", value=True)
+    col_t1, col_t2 = st.columns([1, 3])
+    with col_t1:
+        apply_ai_template = st.checkbox("AI 추천 템플릿 일괄 적용", value=True)
 
-    suggested_formula = ai_suggestion["formula"] if apply_ai_template else ""
-
-    # 수식 입력란
-    raw_formula = st.text_input(
-        "이론값 산출 식 입력",
-        value=suggested_formula,
-        placeholder="예: E0 / (1 + (E0/mc2) * (1 - cos(산란각)))",
-    )
-
-    # 템플릿 적용 반영
-    if apply_ai_template and st.session_state.get("last_applied_formula") != suggested_formula:
+    if apply_ai_template and st.session_state.get("last_applied_title") != exp_name:
         st.session_state.input_df = pd.DataFrame(
             columns=ai_suggestion["columns"],
             data=ai_suggestion["data"]
         )
-        st.session_state["last_applied_formula"] = suggested_formula
+        st.session_state.selected_formula = ai_suggestion["formulas"][0]
+        st.session_state["last_applied_title"] = exp_name
 
-    # 데이터 에디터
+    # AI 추천 공식 선택 시스템 (체크박스/라디오 형태)
+    st.markdown("**💡 AI 추천 공식 목록 (선택하여 바로 사용)**")
+    selected_from_ai = st.radio(
+        "매뉴얼에서 추출된 공식을 선택하세요:",
+        options=ai_suggestion["formulas"],
+        index=0
+    )
+
+    # 수식 입력 및 수정란
+    raw_formula = st.text_input(
+        "이론값 산출 식 (직접 수정 가능)",
+        value=selected_from_ai,
+        placeholder="예: E0 / (1 + (E0/mc2) * (1 - cos(산란각)))",
+    )
+
+    # 표 관리 팝오버 (열 추가/삭제)
+    with st.popover("⚙️ 표 변수(열) 추가 및 관리"):
+        st.write("새로운 변수 추가")
+        new_col_name = st.text_input("변수명 (예: 전압, 거리)", key="new_col_name")
+        unit_choice = st.selectbox(
+            "단위",
+            ["선택안함", "deg", "rad", "keV", "eV", "V", "A", "m", "cm", "mm", "nm", "s", "kg", "C", "N"],
+            key="new_col_unit",
+        )
+        if st.button("열 추가 실행", key="add_col_btn"):
+            if new_col_name:
+                final_col_name = (
+                    f"{new_col_name} [{unit_choice}]"
+                    if unit_choice != "선택안함"
+                    else new_col_name
+                )
+                if final_col_name not in st.session_state.input_df.columns:
+                    cols = list(st.session_state.input_df.columns)
+                    cols.insert(-1, final_col_name)
+                    st.session_state.input_df[final_col_name] = 0.0
+                    st.session_state.input_df = st.session_state.input_df[cols]
+                    st.rerun()
+
+        st.divider()
+        st.write("기존 변수 삭제")
+        if len(st.session_state.input_df.columns) > 1:
+            del_col_choice = st.selectbox(
+                "삭제할 변수 선택",
+                st.session_state.input_df.columns,
+                key="del_col_sel",
+            )
+            if st.button("열 삭제 실행", key="del_col_btn"):
+                st.session_state.input_df = st.session_state.input_df.drop(
+                    columns=[del_col_choice]
+                )
+                st.rerun()
+
+    # 데이터 에디터 (표)
     st.markdown("**📊 실험 데이터 입력 표**")
     edited_df = st.data_editor(
         st.session_state.input_df,
         num_rows="dynamic",
         use_container_width=True,
+        key="data_editor",
     )
 
-    # -- 3. 교차 검증 및 예상 데이터 미리보기 장치 ---------------------------
+    # -- 3. 실시간 교차 검증 및 예상 데이터 비교 ---------------------------
     st.divider()
     st.header("🔍 3. 교차 검증 및 예상 데이터 비교")
-    st.markdown("<div class='small-note'>입력된 변수와 수식을 바탕으로 실시간 산출되는 이론값(예상치)을 실험 측정값과 나란히 비교하여 진행 중인 실험과의 정합성을 교차 검증합니다.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='small-note'>입력된 수식과 상수를 바탕으로 실시간 산출되는 이론값(예상치)을 측정값과 나란히 비교하여 실험 정합성을 교차 검증합니다.</div>", unsafe_allow_html=True)
 
-    # 실시간 교차 검증 계산 프리뷰
     preview_data = []
     meas_col_chk = None
     for col in edited_df.columns:
@@ -390,13 +444,12 @@ def main() -> None:
         res_df = pd.DataFrame(results)
         current_const_str = ", ".join(f"{k}={v:.4g}" for k, v in st.session_state.custom_constants.items())
 
-        # 학술 보고서 텍스트 생성
         report_md = f"""
         ### 실험 주제: {exp_name}
         - **적용 수식**: `{raw_formula}`
         - **사용 상수**: {current_const_str}
         - **데이터 요약**: 총 {len(res_df)}개 조건 측정 완료. 평균 이론값 {np.mean(theo_arr):.4g}, 평균 측정값 {np.mean(meas_arr):.4g}.
-        - **결론 경향**: 이론 모델과 측정값이 전반적인 단조 감소/증가 트렌드를 공유하나, 고각도/고전압 영역에서 기하학적 수용 비대칭성 및 다중 산란에 따른 양(+)의 계통 오차가 관측됨.
+        - **결론 경향**: 이론 모델과 측정값이 전반적인 단조 추세를 공유하나, 고각도/고전압 영역에서 기하학적 수용 비대칭성 및 다중 산란에 따른 양(+)의 계통 오차가 관측됨.
         """
 
         st.session_state.history.append({
@@ -409,10 +462,10 @@ def main() -> None:
             "theo_arr": np.array(theo_arr),
             "meas_arr": np.array(meas_arr),
         })
-        st.success("분석 완료! 아래 누적 보드에 리포트가 추가되었습니다.")
+        st.success("분석 완료! 아래 누적 보드에 리포트와 시각화 그래프가 추가되었습니다.")
         st.rerun()
 
-    # -- 5. 누적 분석 보드 ------------------------------------------------
+    # -- 5. 누적 분석 보드 및 시각화 ----------------------------------------
     st.divider()
     st.header("📚 4. 실험 분석 누적 보드 및 학술 진단 리포트")
 
@@ -434,15 +487,17 @@ def main() -> None:
 
                 st.dataframe(rec["df"], use_container_width=True)
 
-                # 시각화 그래프
-                if len(rec["theo_arr"]) >= 2:
-                    fig, ax = plt.subplots(figsize=(6, 3))
-                    ax.scatter(rec["theo_arr"], rec["meas_arr"], color="#3182ce", label="측정 vs 이론")
-                    lo = min(rec["theo_arr"].min(), rec["meas_arr"].min()) * 0.9
-                    hi = max(rec["theo_arr"].max(), rec["meas_arr"].max()) * 1.1
-                    ax.plot([lo, hi], [lo, hi], "k--", alpha=0.5, label="이상적 일치 (y=x)")
-                    ax.set_xlabel("이론값")
-                    ax.set_ylabel("측정값")
+                # 데이터 분석 결과를 바로 보여주는 시각화 그래프 패널
+                if len(rec["theo_arr"]) >= 1:
+                    st.markdown("**📈 측정 데이터 분석 시각화 그래프**")
+                    fig, ax = plt.subplots(figsize=(6, 3.2))
+                    ax.scatter(rec["theo_arr"], rec["meas_arr"], color="#3182ce", s=40, label="이론값 vs 측정값")
+                    if len(rec["theo_arr"]) >= 2:
+                        lo = min(rec["theo_arr"].min(), rec["meas_arr"].min()) * 0.9
+                        hi = max(rec["theo_arr"].max(), rec["meas_arr"].max()) * 1.1
+                        ax.plot([lo, hi], [lo, hi], "k--", alpha=0.5, label="이상적 일치 (y=x)")
+                    ax.set_xlabel("이론값 (계산)")
+                    ax.set_ylabel("실험 측정값")
                     ax.grid(True, alpha=0.3)
                     ax.legend()
                     st.pyplot(fig)
@@ -466,7 +521,7 @@ def main() -> None:
 
     # -- 6. AI 멘토 Q&A (토스 스타일 어투 적용) ---------------------------
     st.header("💬 5. AI 실험 멘토 (실시간 심층 Q&A)")
-    st.markdown("<div class='small-note'>토스처럼 다정하고 부드러운 말투로 실험 궁금증을 해결해 드려요.</div>", unsafe_allow_html=True)
+    st.markdown("<div class='small-note'>토스처럼 다정하고 부드러운 말투로 실험 궁금증을 해결해 드려요. ☕</div>", unsafe_allow_html=True)
 
     for msg in st.session_state.chat_messages:
         with st.chat_message(msg["role"]):
@@ -478,7 +533,7 @@ def main() -> None:
             st.markdown(prompt)
 
         with st.chat_message("assistant"):
-            with st.spinner("생각 중이에요... 잠시만 기다려주세요! ☕"):
+            with st.spinner("생각 중이에요... 잠시만 기다려주세요! 🌿"):
                 prompt_lower = prompt.lower()
                 
                 # 토스 스타일 친근하고 부드러운 어투 적용
@@ -492,14 +547,14 @@ def main() -> None:
                     )
                 elif "불확도" in prompt_lower:
                     answer = (
-                        "불확도 개념이 조금 낯설게 느껴질 수 있어요. 🌿\n\n"
+                        "불확도 개념이 조금 낯선 느낌이 들 수 있어요. 🌿\n\n"
                         "불확도는 '측정값이 가질 수 있는 자연스러운 흔들림의 범위'라고 생각하시면 편해요. "
                         "우리 시스템에서는 입력해주신 변수들의 미세한 변화가 결과에 얼마나 영향을 주는지 선형 근사 방식으로 계산해서 보여드리고 있어요. "
                         "확장 불확도($k\\approx2$)는 약 95% 확률로 이 범위 안에 참값이 들어있다고 믿을 수 있는 안전지대랍니다!"
                     )
                 else:
                     answer = (
-                        f"말씀해주신 '{prompt}'에 대해 고민해 보았어요! 💡\n\n"
+                        f"말씀해주신 '{prompt}'에 대해 함께 고민해 보았어요! 💡\n\n"
                         "물리 실험을 하다 보면 이론식과 실제 측정값이 완벽하게 일치하기는 정말 어려워요. "
                         "대부분 기기의 기하학적 한계나 환경적인 노이즈 때문에 생기는 자연스러운 현상이랍니다. "
                         "혹시 구체적으로 어떤 실험 파트에서 예상과 다른 결과가 나왔는지 알려주시면 더 자세히 함께 살펴볼게요!"

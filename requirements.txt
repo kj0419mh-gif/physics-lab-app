@@ -1,3 +1,5 @@
 streamlit
 pandas
 PyPDF2
+numpy
+matplotlib

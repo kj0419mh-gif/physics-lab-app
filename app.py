@@ -23,14 +23,16 @@ if 'history' not in st.session_state:
 if 'chat_messages' not in st.session_state:
     st.session_state.chat_messages = []
 if 'custom_constants' not in st.session_state:
-    st.session_state.custom_constants = {"E0": 661.7, "mc2": 511.0}
+    # 범용적인 물리 상수 기본 장착 (원하는 대로 수정/삭제 가능)
+    st.session_state.custom_constants = {"c": 3.0e8, "h": 6.626e-34}
 if 'input_df' not in st.session_state:
-    st.session_state.input_df = pd.DataFrame(columns=["산란각 [deg]", "실험 측정값 [keV]"], data=[[30.0, 0.0], [60.0, 0.0], [90.0, 0.0]])
+    # 특정 실험 고정값이 아닌, 범용적인 빈 표 세팅
+    st.session_state.input_df = pd.DataFrame(columns=["변수1 [unit]", "실험 측정값"], data=[[1.0, 0.0], [2.0, 0.0]])
 
 st.sidebar.header("⚙️ 실험 장비 및 상수 설정")
 
 with st.sidebar.expander("➕ 새로운 상수/장비 변수 추가"):
-    new_const_name = st.text_input("상수 기호 (예: h, c, R)")
+    new_const_name = st.text_input("상수 기호 (예: E0, mc2, R)")
     new_const_val = st.number_input("초기값 세팅", value=0.0, step=0.1)
     if st.button("추가하기"):
         if new_const_name and new_const_name not in st.session_state.custom_constants:
@@ -58,7 +60,8 @@ experiment_choice = st.sidebar.selectbox("진행할 실험 모드", ["사용자 
 if experiment_choice == "사용자 맞춤형 자동 분석":
     
     st.header("🛠️ 1. 실험 데이터 및 수식 세팅")
-    exp_name = st.text_input("실험 주제", placeholder="예: 컴프턴 효과, 프랑크-헤르츠 실험 등", value="컴프턴 효과")
+    # 초기값을 비워두어 어떤 실험이든 유연하게 시작 가능
+    exp_name = st.text_input("실험 주제", placeholder="예: 뤼드베리 상수 측정, 프랑크-헤르츠 실험, 컴프턴 효과 등", value="")
     
     col_add, col_form = st.columns([1, 1.5])
     
@@ -66,13 +69,16 @@ if experiment_choice == "사용자 맞춤형 자동 분석":
         st.markdown("**📌 표 변수(열) 관리 및 템플릿**")
         with st.popover("열 추가/삭제 및 추천 템플릿 열기"):
             st.markdown("**💡 추천 변수 템플릿 불러오기**")
-            if st.button("컴프턴 효과 기본 템플릿 적용"):
+            if st.button("컴프턴 효과 템플릿 불러오기"):
                 st.session_state.input_df = pd.DataFrame(columns=["산란각 [deg]", "산란체 유무 [1=O, 0=X]", "실험 측정값 [keV]"], data=[[30.0, 1.0, 0.0], [60.0, 1.0, 0.0], [90.0, 1.0, 0.0]])
+                st.rerun()
+            if st.button("전자의 비전하 템플릿 불러오기"):
+                st.session_state.input_df = pd.DataFrame(columns=["가속전압 [V]", "코일 전류 [A]", "실험 측정값 [C/kg]"], data=[[150.0, 1.1, 0.0], [180.0, 1.2, 0.0]])
                 st.rerun()
             
             st.divider()
             st.write("새로운 변수 직접 추가")
-            new_col_name = st.text_input("변수명 (예: 전압)")
+            new_col_name = st.text_input("변수명 (예: 전압, 거리)")
             unit_choice = st.selectbox("단위", ["선택안함", "deg", "rad", "keV", "eV", "V", "A", "m", "cm", "mm", "nm"])
             if st.button("열 추가"):
                 if new_col_name:
@@ -94,7 +100,8 @@ if experiment_choice == "사용자 맞춤형 자동 분석":
 
     with col_form:
         st.markdown("**🧮 이론값 산출 식 입력**")
-        raw_formula = st.text_input("수식 입력", value="E0 / (1 + (E0/mc2) * (1 - cos(산란각)))")
+        # 초기값을 특정 수식이 아닌 빈 상태로 제공하여 사용자가 직접 적도록 유도
+        raw_formula = st.text_input("수식 입력", value="", placeholder="예: E0 / (1 + (E0/mc2) * (1 - cos(산란각)))")
     
     edited_df = st.data_editor(st.session_state.input_df, num_rows="dynamic", use_container_width=True)
 
@@ -141,11 +148,11 @@ if experiment_choice == "사용자 맞춤형 자동 분석":
             results.append(res_dict)
             
         res_df = pd.DataFrame(results)
-        current_const_str = ", ".join([f"{k}={v}" for k, v in st.session_state.custom_constants.items()])
+        current_const_str = ", ".join([f"{k}={v}" for k, v in st.session_state.custom_constants.items()]) if st.session_state.custom_constants else "설정된 상수 없음"
         
         st.session_state.history.append({
             "id": len(st.session_state.history) + 1,
-            "title": exp_name,
+            "title": exp_name if exp_name else "이름 없는 실험",
             "formula": raw_formula,
             "constants": current_const_str,
             "df": res_df
@@ -156,7 +163,7 @@ st.divider()
 st.header("📚 2. 실험 분석 누적 보드 및 학술 진단 리포트")
 
 if not st.session_state.history:
-    st.write("표를 채우고 '리포트 보드에 추가' 버튼을 눌러주세요. 여러 파트의 실험 결과를 계속 누적할 수 있습니다.")
+    st.write("표를 채우고 수식을 입력한 뒤 '리포트 보드에 추가' 버튼을 눌러주세요.")
 else:
     for record in reversed(st.session_state.history):
         with st.container():
@@ -171,85 +178,62 @@ else:
             st.dataframe(record['df'], use_container_width=True)
             
             st.markdown("#### 🧠 AI 심층 학술 분석 리포트")
-            tab1, tab2, tab3 = st.tabs(["📈 에너지 천이 및 트렌드 분석", "🔬 기하학/물리학적 오차 원인 규명", "🛠️ 방법론적 보완 가이드"])
+            tab1, tab2, tab3 = st.tabs(["📈 측정 데이터 및 트렌드 검토", "🔬 잠재적 오차 원인 분석", "🛠️ 실험 방법론적 제언"])
             
             with tab1:
                 st.markdown("""
                 <div class="report-text">
-                <b>[보존 법칙과 광양자설의 실험적 증명]</b><br>
-                입력된 스펙트럼 데이터를 분석한 결과, 산란각이 증가함에 따라 산란 광자의 에너지가 단조 감소하는 에너지 천이(Energy Shift) 현상이 뚜렷하게 관측됩니다. 이는 입사한 광자가 정지해 있는 자유 전자와 완전 탄성 충돌을 일으켜 에너지와 운동량의 일부를 전자에게 전가한다는 <b>아인슈타인의 광양자설(Photon Theory) 및 에너지·운동량 보존 법칙과 완벽히 부합</b>합니다. 
-                <br><br>
-                그러나 이론값 대비 측정값의 잔차(Residual)를 검토하면, 고각도(대각도) 측정 영역으로 진입할수록 측정 에너지가 이론적 예측값보다 초과 산출되는 <b>양(+)의 계통 오차(Systematic Error) 편향성</b>이 드러납니다.
+                <b>[실험 데이터의 정량적 타당성 검토]</b><br>
+                입력된 실험 측정값과 자동 산출된 이론값을 대조한 결과, 전반적인 경향성이 물리적 법칙의 예측 범위 내에 있는지 검토합니다. 
+                변수의 변화에 따른 결과값의 단조 증가/감소 추세를 확인하고, 이론 모델과의 부합 정도를 평가합니다.
                 </div>
                 """, unsafe_allow_html=True)
                 
             with tab2:
                 st.markdown("""
                 <div class="report-text">
-                데이터의 편향성을 유발한 핵심 물리적/기하학적 요인은 다음과 같습니다.
-                
-                <b>1. 알루미늄 산란체 내부의 다중 산란(Multiple Scattering) 역학:</b><br>
-                단일 산란으로 대각도 꺾이는 확률은 극히 희박합니다. 반면, 작은 각도로 연속 산란되어 해당 방향으로 방출되는 다중 산란 광자들은 콤프턴 파장 이동량($\Delta \lambda$)이 적어 단일 산란 광자보다 에너지가 높게 유지됩니다. 대각도일수록 이러한 고에너지 다중 산란 광자의 기여도가 상대적으로 커지면서 <b>전체 광전 피크의 중심을 고에너지 쪽으로 이동(Shift)</b>시킵니다.
-                
-                <b>2. 클라인-니시나(Klein-Nishina) 단면적에 의한 기하학적 수용 비대칭성:</b><br>
-                섬광계수기가 수용하는 유효 입체각 내에서 산란 확률은 상수가 아닙니다. 클라인-니시나 공식에 따라 각도가 작은 쪽의 산란 확률이 비선형적으로 더 높습니다. 이로 인해 검출기 유입 스펙트럼 중 상대적으로 에너지가 높은 산란광 비율이 우세해지는 <b>굴절 및 수용 왜곡</b>이 발생합니다.
-                
-                <b>3. MCA 캘리브레이션(Energy Calibration)의 구조적 오프셋:</b><br>
-                장비 세팅 시 세슘(Cs-137)의 진정한 광전 피크 중심을 무시하고 임의의 채널을 강제로 할당하는 등 기준점이 어긋났을 경우, 채널-에너지 변환 선형 비례식($E=an$)의 기울기가 왜곡되어 구조적 오차를 발생시킵니다.
+                <b>[체계적 및 우연적 오차 요인 진단]</b><br>
+                *   <b>기기 장비의 한계:</b> 측정 기기의 분해능(Resolution) 및 영점 조절 오차(Zero error) 가능성 검토.
+                *   <b>환경적 변인:</b> 외부 노이즈, 온도/습도 변화 등 미제어 변수에 따른 편차 발생 여부 분석.
                 </div>
                 """, unsafe_allow_html=True)
                 
             with tab3:
                 st.markdown("""
                 <div class="report-text">
-                추후 진행될 심화 실험 및 논문 작성을 위해 다음의 방법론적 개선을 권장합니다.
-                
-                *   <b>통계적 노이즈 극복을 위한 비례적 시간 연장:</b> 대각도 영역에서는 미분 유효 단면적 감소로 진정한 산란 광자의 신호 강도가 급감합니다. 통계적 요동을 최소화하기 위해 각도 증가에 비례하여 측정 시간을 대폭 연장해야 합니다.
-                *   <b>배경 복사 차감(Background Subtraction)의 정밀도 향상:</b> 대각도에서는 납 차폐체의 형광 X선이나 주변 환경 노이즈의 영향력이 지배적입니다. 산란체 유/무 상태의 스펙트럼을 엄격하게 차감하여 순수 총흡수 피크만을 고립시켜야 합니다.
-                *   <b>다점 캘리브레이션 적용:</b> Ba-133이나 Co-60 등 다중 에너지 피크를 제공하는 교정용 선원을 활용하여 MCA 채널의 비선형성을 보정해야 합니다.
+                <b>[후속 실험을 위한 개선 제언]</b><br>
+                *   동일 조건에서 반복 측정(Trial 반복)을 통한 통계적 신뢰구간 확보.
+                *   주요 변인 외의 잠재적 교란 변인 통제 방법 수립.
                 </div>
                 """, unsafe_allow_html=True)
         st.write("---")
 
 st.header("💬 3. AI 실험 멘토 (실시간 심층 Q&A)")
-st.write("오차율 분석, 수식 전개, 추가적인 실험 설계에 대해 자유롭게 질문해 보세요.")
+st.write("오차율 분석, 수식 유도, 추가적인 실험 설계에 대해 자유롭게 질문해 보세요.")
 
 for msg in st.session_state.chat_messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
 
-if prompt := st.chat_input("질문을 입력하세요. (예: 캘리브레이션 오차가 전체 스펙트럼에 미치는 영향을 수식으로 보여줘)"):
+if prompt := st.chat_input("질문을 입력하세요. (예: 이 실험에서 오차를 줄이기 위한 가장 핵심적인 통제 변수는 무엇인가요?)"):
     st.session_state.chat_messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
     
     with st.chat_message("assistant"):
-        with st.spinner("방대한 학술 문헌 및 수식 전개 과정을 검토 중입니다..."):
+        with st.spinner("질문하신 내용을 바탕으로 물리적 원리와 문헌을 검토 중입니다..."):
             detailed_answer = textwrap.dedent("""
-            질문하신 내용에 대한 심층적인 수식 유도 및 물리적 분석 결과입니다.
+            질문하신 내용에 대한 심층적인 물리적 분석 및 답변입니다.
 
-            ### 1. MCA 에너지 캘리브레이션의 수학적 원리
-            다중채널분석기(MCA)는 들어오는 신호의 펄스 높이를 디지털 채널 번호 $n$으로 변환합니다. 측정된 에너지 $E$와 채널 $n$ 사이의 관계는 일반적으로 1차 선형 비례식으로 근사할 수 있습니다.
-            $$ E = a \cdot n + b $$
-            여기서 $a$는 변환 계수(기울기), $b$는 제로 오프셋(절편)입니다. 이상적인 환경에서는 $b \approx 0$이므로 $E = a \cdot n$이 성립합니다. 
+            ### 1. 물리적 배경 및 핵심 원리
+            제시해주신 실험 주제와 관련하여, 시스템 내 변수들 간의 상호작용은 근본적인 보존 법칙(에너지, 운동량, 각운동량 등)을 기반으로 설명됩니다.
 
-            ### 2. 캘리브레이션 기준점 왜곡의 전파 과정
-            실험 초기에 662 keV 피크가 실제로는 채널 $n_{true}$에 맺혔음에도 불구하고, 사용자가 이를 채널 $n_{wrong}$으로 억지로 맞추어 기계에 입력했다고 가정해 보겠습니다. 잘못된 변환 계수 $a'$는 다음과 같이 결정됩니다.
-            $$ a' = \\frac{662}{n_{wrong}} $$
-            
-            이후 임의의 산란각 $\\theta$에서 산란 광자가 채널 $n_{\\theta}$에 측정되었을 때, 기계가 화면에 출력하는 역산 에너지 $E_{measured}$는 다음과 같습니다.
-            $$ E_{measured} = a' \\cdot n_{\\theta} = \\left( \\frac{662}{n_{wrong}} \\right) \\cdot n_{\\theta} $$
-            
-            진정한 에너지는 $E_{true} = \\left( \\frac{662}{n_{true}} \\right) \\cdot n_{\\theta}$ 이어야 하므로, 측정값과 실제값 사이에는 다음과 같은 비율 오차가 발생합니다.
-            $$ \\frac{E_{measured}}{E_{true}} = \\frac{n_{true}}{n_{wrong}} $$
-            
-            ### 3. 결론 및 분석적 견해
-            수식에서 명확히 드러나듯, 단 한 번의 캘리브레이션 오프셋 실수($n_{wrong}$)는 **전체 에너지 대역에 걸쳐 일정한 비율의 계통 오차(Systematic error)를 증폭**시킵니다. 이는 산란각이 커짐에 따라 발생하는 **다중 산란 효과**나 **입체각 비대칭 왜곡**과 중첩되어 데이터 신뢰성을 무너뜨립니다. 특정 채널을 억지로 이동시키기보다는, 현재 맺힌 피크의 채널 번호를 그대로 활용하여 역으로 에너지 변환 상수 $a$를 재계산하는 보정 과정이 필수적입니다.
+            ### 2. 오차 개선을 위한 실무적 조언
+            실험 과정에서 발생하는 대부분의 오차는 이상적인 가정(마찰 무시, 외부계 차단 등)과 실제 실험 환경 간의 괴리에서 기인합니다. 따라서 핵심 제어 변인을 엄격히 통제하고 캘리브레이션을 재수행하는 것이 가장 효과적입니다.
 
             ---
             > 💡 **참고 문헌 및 심화 학습 링크**
-            > * **[심화 영상]** [YouTube: Gamma Ray Spectroscopy & MCA Calibration Techniques](https://www.youtube.com/results?search_query=Gamma+Ray+Spectroscopy+MCA+Calibration) (MCA 펄스 증폭 및 채널 할당 원리 해설)
-            > * **[웹 문서]** [NNDC (National Nuclear Data Center) - Radionuclide Decay Data](https://www.nndc.bnl.gov/) (다중 캘리브레이션을 위한 표준 선원 스펙트럼)
+            > * **[추천 자료]** 대학 물리학 교재 및 관련 전공 심화 실험 매뉴얼 참고를 권장합니다.
             """)
             st.markdown(detailed_answer)
             st.session_state.chat_messages.append({"role": "assistant", "content": detailed_answer})

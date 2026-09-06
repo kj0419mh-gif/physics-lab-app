@@ -13,6 +13,7 @@ from typing import Any
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import PyPDF2
 import streamlit as st
 
 
@@ -165,10 +166,8 @@ def safe_eval_formula(
 
 
 def _ai_analyze_manual(text: str) -> dict[str, Any]:
-    """업로드된 매뉴얼 텍스트를 AI가 분석해 실험 주제, 추천 공식 리스트, 테이블 템플릿을 생성한다."""
     lower = text.lower()
     
-    # 기본값: 컴프턴 산란 실험
     result = {
         "title": "컴프턴 산란 실험",
         "formulas": [
@@ -283,14 +282,12 @@ def main() -> None:
     st.divider()
     st.header("🛠️ 2. 실험 주제 및 수식·데이터 세팅")
 
-    # 실험 이름 입력란 복구
     exp_name = st.text_input(
         "실험 주제명",
         value=ai_suggestion["title"],
         placeholder="예: 컴프턴 산란 실험",
     )
 
-    # AI 매뉴얼 분석 안내 및 템플릿 적용 박스
     st.markdown(
         f"""
         <div style="background-color: #eff6ff; padding: 15px; border-radius: 8px; border: 1px solid #bfdbfe; margin-bottom: 15px;">
@@ -313,7 +310,6 @@ def main() -> None:
         st.session_state.selected_formula = ai_suggestion["formulas"][0]
         st.session_state["last_applied_title"] = exp_name
 
-    # AI 추천 공식 선택 시스템 (체크박스/라디오 형태)
     st.markdown("**💡 AI 추천 공식 목록 (선택하여 바로 사용)**")
     selected_from_ai = st.radio(
         "매뉴얼에서 추출된 공식을 선택하세요:",
@@ -321,14 +317,12 @@ def main() -> None:
         index=0
     )
 
-    # 수식 입력 및 수정란
     raw_formula = st.text_input(
         "이론값 산출 식 (직접 수정 가능)",
         value=selected_from_ai,
         placeholder="예: E0 / (1 + (E0/mc2) * (1 - cos(산란각)))",
     )
 
-    # 표 관리 팝오버 (열 추가/삭제)
     with st.popover("⚙️ 표 변수(열) 추가 및 관리"):
         st.write("새로운 변수 추가")
         new_col_name = st.text_input("변수명 (예: 전압, 거리)", key="new_col_name")
@@ -365,7 +359,6 @@ def main() -> None:
                 )
                 st.rerun()
 
-    # 데이터 에디터 (표)
     st.markdown("**📊 실험 데이터 입력 표**")
     edited_df = st.data_editor(
         st.session_state.input_df,
@@ -487,7 +480,6 @@ def main() -> None:
 
                 st.dataframe(rec["df"], use_container_width=True)
 
-                # 데이터 분석 결과를 바로 보여주는 시각화 그래프 패널
                 if len(rec["theo_arr"]) >= 1:
                     st.markdown("**📈 측정 데이터 분석 시각화 그래프**")
                     fig, ax = plt.subplots(figsize=(6, 3.2))
@@ -502,7 +494,6 @@ def main() -> None:
                     ax.legend()
                     st.pyplot(fig)
 
-                # 탭 형태의 학술 리포트
                 tab1, tab2, tab3 = st.tabs(["📈 분석 요약", "🔬 오차 원인 심층 진단", "🛠️ 실험 개선 제언"])
                 with tab1:
                     st.markdown(rec["report_markdown"])
@@ -536,7 +527,6 @@ def main() -> None:
             with st.spinner("생각 중이에요... 잠시만 기다려주세요! 🌿"):
                 prompt_lower = prompt.lower()
                 
-                # 토스 스타일 친근하고 부드러운 어투 적용
                 if "오차" in prompt_lower or "줄이" in prompt_lower:
                     answer = (
                         "오차를 줄이고 싶으시군요! 🎯 가장 먼저 확인해보시면 좋은 것들을 정리해 드릴게요.\n\n"

@@ -1607,7 +1607,7 @@ LLM_PROVIDERS = {
     "내장 지식 엔진 (오프라인)": None,
     "OpenAI 호환 API (GPT 등)": {"model": "gpt-4o-mini", "base_url": "https://api.openai.com/v1"},
     "Anthropic Claude": {"model": "claude-sonnet-4-20250514", "base_url": "https://api.anthropic.com"},
-    "Google Gemini": {"model": "gemini-2.0-flash", "base_url": "https://generativelanguage.googleapis.com"},
+    "Google Gemini": {"model": "gemini-2.5-flash", "base_url": "https://generativelanguage.googleapis.com"},
 }
 
 
